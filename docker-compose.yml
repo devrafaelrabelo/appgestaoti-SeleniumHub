@@ -1,0 +1,89 @@
+# Template de configuração base para os nós Chrome
+x-node-template: &chrome-node
+  build:
+    context: .
+    dockerfile: Dockerfile.selenium
+  depends_on:
+    - selenium-hub
+  networks:
+    - selenium-grid
+  environment:
+    - SE_EVENT_BUS_HOST=selenium-hub
+    - SE_EVENT_BUS_PUBLISH_PORT=4442
+    - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+
+services:
+  selenium-hub:
+    image: selenium/hub:4.18.1
+    container_name: selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+    networks:
+      - selenium-grid
+    environment:
+      - GRID_MAX_SESSION=5
+      - GRID_BROWSER_TIMEOUT=60
+      - GRID_TIMEOUT=60
+
+  chrome-node-1:
+    <<: *chrome-node
+    ports:
+      - "7901:7900"
+
+  # chrome-node-2:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7902:7900"
+
+  # chrome-node-3:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7903:7900"
+
+  # chrome-node-4:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7904:7900"
+
+  # chrome-node-5:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7905:7900"
+
+  # chrome-node-6:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7906:7900"
+
+  # chrome-node-7:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7907:7900"
+
+  # chrome-node-8:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7908:7900"
+
+  # chrome-node-9:
+  #   <<: *chrome-node
+  #   ports:
+  #     - "7909:7900"
+
+  appgestaoti:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: appgestaoti
+    ports:
+      - "5000:8000"
+    networks:
+      - selenium-grid
+    environment:
+      - REMOTE_URL=http://selenium-hub:4444/wd/hub
+
+networks:
+  selenium-grid:
+    driver: bridge

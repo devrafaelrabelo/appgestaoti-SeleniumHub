@@ -1,0 +1,28 @@
+name: Build e Push - SeleniumHub API
+
+on:
+  push:
+    branches: ["main"] # Altere se estiver usando outro branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v3
+
+      - name: Login no GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build e push da imagem Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.prod
+          push: true
+          tags: ghcr.io/devrafaelrabelo/seleniumhub-server:latest

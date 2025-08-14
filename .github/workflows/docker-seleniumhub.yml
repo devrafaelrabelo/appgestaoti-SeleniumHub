@@ -2,7 +2,7 @@ name: Build e Push - SeleniumHub API
 
 on:
   push:
-    branches: ["main"] # Altere se estiver usando outro branch
+    branches: ["main"]
 
 jobs:
   build:
@@ -25,4 +25,4 @@ jobs:
           context: .
           file: ./Dockerfile.prod
           push: true
-          tags: ghcr.io/devrafaelrabelo/seleniumhub-server:latest
+          tags: ghcr.io/devrafaelrabelo/appgestaoti-seleniumhub:latest

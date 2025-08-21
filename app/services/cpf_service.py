@@ -92,37 +92,38 @@ async def consultar_portal_transparencia(cpf: str) -> Dict[str, Any]:
 # ----------------------------
 async def processar_consulta(cpf: str, data_nascimento: str) -> dict:
     loop = asyncio.get_running_loop()
+    stop_evt = threading.Event()  # <- evento para cancelamento cooperativo
 
-    # se você usar cancelamento cooperativo, crie o stop_evt aqui e passe ao Selenium
-    # stop_evt = threading.Event()
-
-    # 1) Portal como Task (ok)
     tarefa_portal = asyncio.create_task(consultar_portal_transparencia(cpf))
 
-    # 2) Selenium via executor (retorna concurrent.futures.Future)
-    fut_selenium = loop.run_in_executor(None, consultar_com_selenium, cpf, data_nascimento)
+    # PASSA o stop_evt aqui 👇
+    fut_selenium = loop.run_in_executor(
+        None, consultar_com_selenium, cpf, data_nascimento, stop_evt
+    )
 
-    # 3) NÃO faça create_task de um Future. Use wrap_future OU passe direto no wait:
-    # t_selenium = asyncio.wrap_future(fut_selenium)  # opção A
-    # done, pending = await asyncio.wait({tarefa_portal, t_selenium}, return_when=asyncio.FIRST_COMPLETED)
-
-    # ...ou simplesmente:
     done, pending = await asyncio.wait(
-        {tarefa_portal, fut_selenium},  # opção B (direto)
+        {tarefa_portal, fut_selenium},
         return_when=asyncio.FIRST_COMPLETED
     )
 
     for task in done:
         resultado = task.result()
         if resultado and isinstance(resultado, dict) and resultado.get("status") == "sucesso":
+            # sinaliza a outra fonte para encerrar cedo
+            stop_evt.set()
             for t in pending:
-                # t.cancel() não mata a thread; se tiver stop_evt, sinalize aqui
-                t.cancel()
+                # cancelar task async; a thread vai respeitar o stop_evt
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
             return resultado
 
+    # se o primeiro não foi sucesso, tenta a outra
     for task in pending:
         try:
-            return await task  # aqui pode ser a Task async OU o Future do executor
+            stop_evt.set()  # já podemos pedir para Selenium encerrar
+            return await task
         except asyncio.CancelledError:
             pass
 

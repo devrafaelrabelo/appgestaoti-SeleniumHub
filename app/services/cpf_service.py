@@ -90,82 +90,41 @@ async def consultar_portal_transparencia(cpf: str) -> Dict[str, Any]:
 # ----------------------------
 # Orquestração: corrida com fallback
 # ----------------------------
-async def processar_consulta(cpf: str, data_nascimento: str, timeout_total: int = DEFAULT_TIMEOUT) -> Dict[str, Any]:
-    """
-    Disputa entre Portal (async) e Selenium (thread):
-      - Retorna o primeiro 'sucesso'
-      - Se o primeiro concluir com falha, tenta a outra fonte dentro de 'timeout_total'
-      - Cancela o Selenium cooperativamente via stop_evt
-      - Nunca levanta HTTPException (o controller decide)
-    """
+async def processar_consulta(cpf: str, data_nascimento: str) -> dict:
     loop = asyncio.get_running_loop()
-    stop_evt = threading.Event()
 
-    # Cria as tarefas
-    t_portal = asyncio.create_task(consultar_portal_transparencia(cpf))
-    fut_selenium = loop.run_in_executor(_EXECUTOR, consultar_com_selenium, cpf, data_nascimento, stop_evt)
+    # se você usar cancelamento cooperativo, crie o stop_evt aqui e passe ao Selenium
+    # stop_evt = threading.Event()
 
-    # Empacota o future do executor em Task para tratamento uniforme
-    t_selenium = asyncio.create_task(asyncio.wrap_future(asyncio.ensure_future(fut_selenium)))
+    # 1) Portal como Task (ok)
+    tarefa_portal = asyncio.create_task(consultar_portal_transparencia(cpf))
 
-    try:
-        done, pending = await asyncio.wait(
-            {t_portal, t_selenium},
-            timeout=timeout_total,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
+    # 2) Selenium via executor (retorna concurrent.futures.Future)
+    fut_selenium = loop.run_in_executor(None, consultar_com_selenium, cpf, data_nascimento)
 
-        if not done:
-            # Ninguém terminou no tempo
-            stop_evt.set()
+    # 3) NÃO faça create_task de um Future. Use wrap_future OU passe direto no wait:
+    # t_selenium = asyncio.wrap_future(fut_selenium)  # opção A
+    # done, pending = await asyncio.wait({tarefa_portal, t_selenium}, return_when=asyncio.FIRST_COMPLETED)
+
+    # ...ou simplesmente:
+    done, pending = await asyncio.wait(
+        {tarefa_portal, fut_selenium},  # opção B (direto)
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    for task in done:
+        resultado = task.result()
+        if resultado and isinstance(resultado, dict) and resultado.get("status") == "sucesso":
             for t in pending:
+                # t.cancel() não mata a thread; se tiver stop_evt, sinalize aqui
                 t.cancel()
-            return {"status": "falha", "mensagem": "Tempo excedido na consulta"}
+            return resultado
 
-        # Primeiro que terminou
-        first = next(iter(done))
+    for task in pending:
         try:
-            first_result = await _safe_result(first)
+            return await task  # aqui pode ser a Task async OU o Future do executor
         except asyncio.CancelledError:
-            first_result = {"status": "falha", "mensagem": "Cancelado"}
+            pass
 
-        if first_result.get("status") == "sucesso":
-            # Cancela a outra fonte
-            stop_evt.set()
-            for t in pending:
-                t.cancel()
-            return first_result
+    raise HTTPException(status_code=500, detail="Erro na consulta CPF")
 
-        # Não teve sucesso — tenta a outra se ainda estiver pendente
-        other = next(iter(pending), None)
-        if other:
-            stop_evt.set()  # sinaliza Selenium parar cedo se ele for o "other"
-            try:
-                other_result = await asyncio.wait_for(_safe_result(other), timeout=timeout_total)
-            except asyncio.TimeoutError:
-                return {"status": "falha", "mensagem": "Tempo excedido aguardando método alternativo"}
-            except asyncio.CancelledError:
-                return {"status": "falha", "mensagem": "Consulta cancelada"}
-
-            if other_result.get("status") == "sucesso":
-                return other_result
-            return other_result  # falha padronizada da segunda fonte
-
-        # Só o primeiro concluiu (com falha)
-        return first_result
-
-    finally:
-        stop_evt.set()
-        for t in (t_portal, t_selenium):
-            if not t.done():
-                t.cancel()
-
-async def _safe_result(task: asyncio.Task) -> Dict[str, Any]:
-    try:
-        result = await task
-        # Garante dict padrão
-        if not isinstance(result, dict):
-            return {"status": "falha", "mensagem": "Retorno inesperado"}
-        return result
-    except Exception as e:
-        return {"status": "falha", "mensagem": f"Erro: {e}"}

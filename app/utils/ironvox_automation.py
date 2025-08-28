@@ -1,34 +1,44 @@
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import Select
+import time
+
 def atualizar_ramal(driver, wait, ramal, nome_usuario, setor):
     try:
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[ng-model="q"]'))).clear()
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[ng-model="q"]'))).send_keys(ramal)
+        campo_busca = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[ng-model="q"]')))
+        campo_busca.clear()
+        campo_busca.send_keys(ramal)
+
         xpath_ramal = f'//tr[td[2][normalize-space(text())="{ramal}"]]'
         wait.until(EC.visibility_of_element_located((By.XPATH, xpath_ramal)))
         driver.find_element(By.XPATH, f'{xpath_ramal}//a[@ng-click="updateData(e)"]').click()
 
         novo_callerid = f"{ramal} {nome_usuario} {setor} HS"
-        wait.until(EC.visibility_of_element_located((By.ID, "callerid"))).clear()
-        driver.find_element(By.ID, "callerid").send_keys(novo_callerid)
+        campo_callerid = wait.until(EC.visibility_of_element_located((By.ID, "callerid")))
+        campo_callerid.clear()
+        campo_callerid.send_keys(novo_callerid)
 
-        select = Select(driver.find_element(By.NAME, "pickupgroup"))
+        # Seleciona grupo do setor
+        select = Select(wait.until(EC.presence_of_element_located((By.NAME, "pickupgroup"))))
         for option in select.options:
             if setor.upper() in option.text.upper():
                 select.select_by_visible_text(option.text)
                 break
 
+        # Avançar etapas
         for _ in range(3):
             wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "PRÓXIMO")]'))).click()
-            time.sleep(0.5)
 
-        while True:
+        # Remover filas existentes
+        start = time.time()
+        while time.time() - start < 10:  # timeout de 10s
             filas = driver.find_elements(By.CSS_SELECTOR, "span.agentSelected")
             if not filas:
                 break
             driver.execute_script("arguments[0].click();", filas[0])
-            time.sleep(0.2)
-            driver.execute_script("arguments[0].click();", filas[0])
 
-        driver.find_element(By.XPATH, '//button[@ng-click="insertData(ramal)"]').click()
+        # Salvar
+        wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@ng-click="insertData(ramal)"]'))).click()
         wait.until(EC.invisibility_of_element_located((By.ID, "addExten")))
 
         return {"status": "sucesso"}
@@ -39,30 +49,34 @@ def atualizar_ramal(driver, wait, ramal, nome_usuario, setor):
 
 def atualizar_agente(driver, wait, ramal, nome_usuario, setor):
     try:
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[ng-model="q"]'))).clear()
-        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[ng-model="q"]'))).send_keys(ramal)
+        campo_busca = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'input[ng-model="q"]')))
+        campo_busca.clear()
+        campo_busca.send_keys(ramal)
+
         xpath = f'//tr[td[2][normalize-space(text())="{ramal}"]]'
         wait.until(EC.visibility_of_element_located((By.XPATH, xpath)))
         driver.find_element(By.XPATH, f'{xpath}//a[@ng-click="updateData(a)"]').click()
 
-        wait.until(EC.visibility_of_element_located((By.NAME, "agentName"))).clear()
-        driver.find_element(By.NAME, "agentName").send_keys(f"{ramal} {nome_usuario}")
+        campo_nome = wait.until(EC.visibility_of_element_located((By.NAME, "agentName")))
+        campo_nome.clear()
+        campo_nome.send_keys(f"{ramal} {nome_usuario}")
 
+        # Avançar etapas
         for _ in range(2):
             wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@ng-click="next()"]'))).click()
-            time.sleep(0.2)
 
+        # Remover filas existentes
         for span in driver.find_elements(By.CSS_SELECTOR, "span.agentSelected"):
             driver.execute_script("arguments[0].click();", span)
-            time.sleep(0.2)
-            driver.execute_script("arguments[0].click();", span)
 
+        # Selecionar setor
         setor_normalizado = normalizar(setor)
         for span in driver.find_elements(By.XPATH, "//li[contains(@class, 'list-group-item')]/span[@class='ng-binding']"):
             if normalizar(span.text) == setor_normalizado:
                 driver.execute_script("arguments[0].click();", span)
                 break
 
+        # Ajustar prioridade do setor selecionado
         for item in driver.find_elements(By.CSS_SELECTOR, "li.list-group-item"):
             try:
                 span = item.find_element(By.CSS_SELECTOR, "span.agentSelected")
@@ -74,6 +88,7 @@ def atualizar_agente(driver, wait, ramal, nome_usuario, setor):
             except:
                 continue
 
+        # Salvar
         wait.until(EC.element_to_be_clickable((
             By.XPATH, "//button[@type='submit' and contains(., 'Atualizar Agente')]"
         ))).click()

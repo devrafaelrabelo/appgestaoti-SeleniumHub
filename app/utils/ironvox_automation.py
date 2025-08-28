@@ -93,6 +93,18 @@ def atualizar_agente(driver, wait, ramal, nome_usuario, setor):
             By.XPATH, "//button[@type='submit' and contains(., 'Atualizar Agente')]"
         ))).click()
 
+         # ⬇️ 1) Se aparecer um alert(), aceite-o:
+        try:
+            alert = WebDriverWait(driver, 5).until(EC.alert_is_present())
+            msg = alert.text
+            alert.accept()
+            print(f"[IRONVOX] Alerta após salvar: {msg}")
+        except TimeoutException:
+            pass  # sem alert, segue
+
+        # ⬇️ 2) Aguarde a modal/loader sumir (ajuste o seletor conforme sua tela)
+        wait.until(EC.invisibility_of_element_located((By.ID, "addExten")))
+
         return {"status": "sucesso"}
 
     except Exception as e:

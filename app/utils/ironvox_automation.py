@@ -1,7 +1,26 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException, UnexpectedAlertPresentException, NoAlertPresentException
+import re
+import unicodedata
 import time
+
+def normalizar(s: str) -> str:
+    """Remove acentos, pontuação e normaliza espaços/letras para comparar textos."""
+    if not s:
+        return ""
+    # remove acentos
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    # caixa baixa
+    s = s.lower()
+    # troca qualquer coisa não alfanumérica por espaço
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    # trim/colapsa espaços
+    s = " ".join(s.split())
+    return s
 
 def atualizar_ramal(driver, wait, ramal, nome_usuario, setor):
     try:
@@ -39,6 +58,16 @@ def atualizar_ramal(driver, wait, ramal, nome_usuario, setor):
 
         # Salvar
         wait.until(EC.element_to_be_clickable((By.XPATH, '//button[@ng-click="insertData(ramal)"]'))).click()
+
+         # ⬇️ 1) Se aparecer um alert(), aceite-o:
+        try:
+            alert = WebDriverWait(driver, 5).until(EC.alert_is_present())
+            msg = alert.text
+            alert.accept()
+            print(f"[IRONVOX] Alerta após salvar: {msg}")
+        except TimeoutException:
+            pass  # sem alert, segue
+
         wait.until(EC.invisibility_of_element_located((By.ID, "addExten")))
 
         return {"status": "sucesso"}
@@ -109,3 +138,23 @@ def atualizar_agente(driver, wait, ramal, nome_usuario, setor):
 
     except Exception as e:
         return {"status": "falha", "mensagem": str(e)}
+
+
+def close_alert_if_any(driver, timeout=5):
+    """Fecha o alert se existir e retorna a mensagem."""
+    try:
+        alert = WebDriverWait(driver, timeout).until(EC.alert_is_present())
+        msg = alert.text
+        alert.accept()
+        print(f"[IRONVOX] Alert fechado: {msg}")
+        return msg
+    except (TimeoutException, NoAlertPresentException):
+        return None
+
+def run_with_alert_guard(driver, fn, *args, **kwargs):
+    """Executa uma ação e, se aparecer UnexpectedAlert, fecha o alert e tenta 1 vez de novo."""
+    try:
+        return fn(*args, **kwargs)
+    except UnexpectedAlertPresentException:
+        close_alert_if_any(driver, timeout=5)
+        return fn(*args, **kwargs)

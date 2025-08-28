@@ -19,6 +19,7 @@ def processar_lista_ramais(lista: list[IronvoxRamalItem]) -> list[dict]:
     try:
         print("🚀 Iniciando driver Selenium para RAMAIS...")
         driver = iniciar_driver_com_perfil(remote=True, perfil="default")
+        wait = WebDriverWait(driver, 20)
         driver.username = settings.IRONVOX_USER
         driver.password = settings.IRONVOX_PASSWORD        
 
@@ -36,7 +37,7 @@ def processar_lista_ramais(lista: list[IronvoxRamalItem]) -> list[dict]:
 
         for item in lista:
             print(f"📞 Atualizando RAMAL {item.ramal}")
-            resultado = atualizar_ramal(driver, driver, item.ramal, item.nome_usuario, item.setor)
+            resultado = atualizar_ramal(driver, wait, item.ramal, item.nome_usuario, item.setor)
             resultados.append({"ramal": item.ramal, **resultado})
 
     except Exception as e:
@@ -61,6 +62,7 @@ def processar_lista_agentes(lista: list[IronvoxAgenteItem]) -> list[dict]:
     try:
         print("🚀 Iniciando driver Selenium para AGENTES...")
         driver = iniciar_driver_com_perfil(remote=True, perfil="default")
+        wait = WebDriverWait(driver, 20)
         driver.username = settings.IRONVOX_USER
         driver.password = settings.IRONVOX_PASSWORD
 
@@ -77,7 +79,7 @@ def processar_lista_agentes(lista: list[IronvoxAgenteItem]) -> list[dict]:
 
         for item in lista:
             print(f"👤 Atualizando AGENTE {item.ramal}")
-            resultado = atualizar_agente(driver, driver, item.ramal, item.nome_usuario, item.setor)
+            resultado = atualizar_agente(driver, wait,  item.ramal, item.nome_usuario, item.setor)
             resultados.append({"ramal": item.ramal, **resultado})
 
     except Exception as e:

@@ -22,3 +22,7 @@ class IronvoxAgenteItem(BaseModel):
 
 class IronvoxAgenteRequest(BaseModel):
     agentes: List[IronvoxAgenteItem]
+
+
+class ListaNumerosRequest(BaseModel):
+    numeros: List[str]
